@@ -1,0 +1,213 @@
+#!/bin/sh
+
+# Parse arguments
+VERBOSE=0
+FLASH_DURATION=""
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        -h|--help)
+            echo "LED Flash Control Script"
+            echo "Usage: sudo $0 [-v] [seconds]"
+            echo ""
+            echo "Options:"
+            echo "  -v, --verbose  Enable verbose output"
+            echo "  -h, --help     Show this help message"
+            echo "  seconds        Duration to flash LED (default: 20)"
+            echo ""
+            echo "Examples:"
+            echo "  sudo $0           # Flash for 20 seconds (quiet mode)"
+            echo "  sudo $0 -v        # Flash for 20 seconds (verbose mode)"
+            echo "  sudo $0 -v 30     # Flash for 30 seconds (verbose mode)"
+            echo "  sudo $0 5         # Flash for 5 seconds (quiet mode)"
+            echo ""
+            echo "The script will automatically detect the appropriate LED and"
+            echo "restore its original state when complete or interrupted."
+            exit 0
+            ;;
+        -v|--verbose)
+            VERBOSE=1
+            shift
+            ;;
+        -*)
+            echo "Error: Unknown option $1"
+            echo "Use '$0 --help' for more information"
+            exit 1
+            ;;
+        *)
+            if [ -z "$FLASH_DURATION" ]; then
+                FLASH_DURATION="$1"
+            else
+                echo "Error: Too many arguments"
+                echo "Use '$0 --help' for more information"
+                exit 1
+            fi
+            shift
+            ;;
+    esac
+done
+
+# Set default duration if not provided
+FLASH_DURATION=${FLASH_DURATION:-20}
+
+# Check root privileges
+if [ "$(id -u)" -ne 0 ]; then
+    echo "Error: This script must be run with sudo privileges"
+    echo "Usage: sudo $0 [-v] [seconds]"
+    echo "Use '$0 --help' for more information"
+    exit 1
+fi
+
+# Validate that the duration is a positive integer
+case "$FLASH_DURATION" in
+    ''|*[!0-9]*|0)
+        echo "Error: Flash duration must be a positive integer"
+        echo "Usage: sudo $0 [-v] [seconds]"
+        echo "Use '$0 --help' for more information"
+        exit 1
+        ;;
+esac
+
+# Global variables for cleanup
+LED_PATH=""
+ORIGINAL_BRIGHTNESS=""
+
+# Cleanup function to restore LED state
+cleanup() {
+    trap - EXIT
+    printf "\n"
+    if [ -n "$LED_PATH" ] && [ -n "$ORIGINAL_BRIGHTNESS" ]; then
+        if [ "$VERBOSE" -eq 1 ]; then
+            echo "Restoring LED to original brightness ($ORIGINAL_BRIGHTNESS)..."
+        fi
+        if echo "$ORIGINAL_BRIGHTNESS" > "$LED_PATH/brightness" 2>/dev/null; then
+            if [ "$VERBOSE" -eq 1 ]; then
+                echo "LED restored successfully"
+            fi
+        else
+            echo "Warning: Failed to restore LED brightness"
+        fi
+    fi
+    exit 0
+}
+
+# Set up signal traps for cleanup
+trap 'cleanup' INT TERM EXIT
+
+# Function to find the appropriate LED path
+find_led_path() {
+    led_candidates="/sys/class/leds/PWR /sys/class/leds/led1 /sys/class/leds/ACT /sys/class/leds/power /sys/class/leds/red:power /sys/class/leds/green:power"
+
+    # Check each candidate path
+    for led_path in $led_candidates; do
+        if [ -f "$led_path/brightness" ]; then
+            echo "$led_path"
+            return 0
+        fi
+    done
+
+    # If no predefined paths work, try to find any LED with "power" in name first
+    for led_dir in /sys/class/leds/*power*; do
+        if [ -d "$led_dir" ] && [ -f "$led_dir/brightness" ]; then
+            echo "$led_dir"
+            return 0
+        fi
+    done
+
+    # Then try to find any LED
+    for led_dir in /sys/class/leds/*/; do
+        if [ -f "$led_dir/brightness" ]; then
+            echo "$led_dir"
+            return 0
+        fi
+    done
+
+    return 1
+}
+
+# Verbose output function
+verbose_echo() {
+    if [ "$VERBOSE" -eq 1 ]; then
+        echo "$@"
+    fi
+}
+
+# Main script
+if [ "$VERBOSE" -eq 1 ]; then
+    echo "=== LED Flash Control ==="
+    echo "Hostname: $(hostname)"
+    echo "IP Address: $(hostname -I | tr -s ' ' | sed 's/^ *//;s/ *$//')"
+fi
+
+# Find the LED path
+LED_PATH=$(find_led_path)
+
+if [ -z "$LED_PATH" ]; then
+    echo "Error: Could not find any controllable LED in /sys/class/leds/"
+    echo ""
+    echo "Available LEDs:"
+    if ls /sys/class/leds/ >/dev/null 2>&1; then
+        for led_dir in /sys/class/leds/*/; do
+            if [ -d "$led_dir" ]; then
+                led_name=$(basename "$led_dir")
+                if [ -f "$led_dir/brightness" ]; then
+                    brightness=$(cat "$led_dir/brightness" 2>/dev/null || echo "unreadable")
+                    echo "  $led_name (brightness: $brightness)"
+                else
+                    echo "  $led_name (no brightness control)"
+                fi
+            fi
+        done
+    else
+        echo "  No LEDs found"
+    fi
+    exit 1
+fi
+
+verbose_echo "Using LED: $(basename "$LED_PATH")"
+
+# Store original brightness value
+ORIGINAL_BRIGHTNESS=$(cat "$LED_PATH/brightness" 2>/dev/null)
+if [ $? -ne 0 ]; then
+    echo "Error: Cannot read brightness from $LED_PATH/brightness"
+    exit 1
+fi
+
+verbose_echo "Original brightness: $ORIGINAL_BRIGHTNESS"
+verbose_echo "Flashing front light for $FLASH_DURATION seconds"
+
+# Turn off LED initially
+if ! echo 0 > "$LED_PATH/brightness" 2>/dev/null; then
+    echo "Error: Cannot write to $LED_PATH/brightness"
+    exit 1
+fi
+
+# Countdown with LED flashing
+i=$FLASH_DURATION
+while [ $i -gt 0 ]; do
+    printf "\rCountdown: %2d seconds remaining..." "$i"
+
+    # Flash LED on for 0.5 seconds
+    echo 1 > "$LED_PATH/brightness" 2>/dev/null
+    sleep 0.5
+
+    # Flash LED off for 0.5 seconds
+    echo 0 > "$LED_PATH/brightness" 2>/dev/null
+    sleep 0.5
+
+    i=$((i - 1))
+done
+
+printf "\rCountdown complete!                    \n"
+
+if [ "$VERBOSE" -eq 1 ]; then
+    echo "Restoring light condition"
+fi
+
+# Restore original brightness
+echo "$ORIGINAL_BRIGHTNESS" > "$LED_PATH/brightness"
+
+verbose_echo "LED control completed successfully"
+
+# Clear the EXIT trap since we completed successfully
+trap - EXIT
