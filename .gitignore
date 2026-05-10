@@ -1,0 +1,61 @@
+# Ignore editor and system files
+.DS_Store
+.*.swp
+*~
+*.tmp
+*.bak
+*.orig
+
+# Ignore shell script temporary and runtime files
+*.log
+*.pid
+*.lock
+
+# Ignore coverage and test artifacts
+coverage/
+*.gcda
+*.gcno
+*.gcov
+
+# Ignore dependency directories (if any)
+node_modules/
+vendor/
+
+# Ignore generated files
+*.out
+*.o
+*.a
+*.so
+
+# Ignore archives and packages
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.rar
+*.7z
+
+# Ignore backup files and caches
+.cache/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Git metadata backup
+.gitignore~
+
+# Python basics
+.env
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+*.egg
+*.whl
+
+# Phil 
+local/
