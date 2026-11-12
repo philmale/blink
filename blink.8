@@ -1,0 +1,55 @@
+.TH BLINK 8 "2026-11-12" "blink" "System Administration"
+.SH NAME
+blink \- flash a host LED to identify the physical machine
+.SH SYNOPSIS
+.B sudo blink
+.RB [ \-v | \-\-verbose ]
+.RI [ seconds ]
+.br
+.B blink
+.RB \-h | \-\-help
+.SH DESCRIPTION
+.B blink
+flashes a host LED for the specified number of seconds, displaying a countdown.
+It is intended to help identify a Raspberry Pi in a rack or stack.
+The default duration is 20 seconds.
+.PP
+The command searches
+.I /sys/class/leds
+for a supported LED, preferring known power LED names.
+If no known name matches, it searches for a name containing
+.B power
+and then falls back to the first available LED.
+.PP
+The LED is switched on and off at half-second intervals.
+Its original brightness is restored on completion or interruption by SIGINT
+or SIGTERM.
+Root privileges are required to control the LED.
+Displaying help does not require root.
+.SH OPTIONS
+.TP
+.BR \-v ", " \-\-verbose
+Show host information, the selected LED, and restoration messages in addition
+to the countdown.
+.TP
+.BR \-h ", " \-\-help
+Display usage information and exit.
+.TP
+.I seconds
+Duration in seconds, specified as a positive integer. Default: 20.
+.SH EXAMPLES
+.TP
+.B sudo blink 5
+Flash the LED for five seconds.
+.TP
+.B sudo blink \-v 30
+Flash for thirty seconds with verbose output.
+.SH FILES
+.TP
+.I /sys/class/leds/*/brightness
+Linux LED brightness controls used by the command.
+.SH NOTES
+Available LEDs and their behaviour depend on the hardware and operating system.
+The selected LED may be an activity LED when no power LED is found.
+.SH SEE ALSO
+.BR sudo (8)
